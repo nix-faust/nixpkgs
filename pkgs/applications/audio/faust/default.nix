@@ -1,58 +1,76 @@
-{ fetchurl, stdenv, bash, alsaLib, atk, cairo, faust-compiler, fontconfig, freetype
-, gcc, gdk_pixbuf, glib, gtk, makeWrapper, pango, pkgconfig, unzip
-, gtkSupport ? true
+{ stdenv
+, coreutils
+, fetchgit
 }:
 
-stdenv.mkDerivation rec {
+let
 
-  version = "0.9.67";
+  version = "8-1-2015";
+
+  appls = "lib/faust/faust2appls";
+
+in stdenv.mkDerivation rec {
+
   name = "faust-${version}";
-  src = fetchurl {
-    url = "http://downloads.sourceforge.net/project/faudiostream/faust-${version}.zip";
-    sha256 = "068vl9536zn0j4pknwfcchzi90rx5pk64wbcbd67z32w0csx8xm1";
+
+  src = fetchgit {
+    url = git://git.code.sf.net/p/faudiostream/code;
+    rev = "4db76fdc02b6aec8d15a5af77fcd5283abe963ce";
+    sha256 = "f1ac92092ee173e4bcf6b2cb1ac385a7c390fb362a578a403b2b6edd5dc7d5d0";
   };
 
-  buildInputs = [ bash unzip faust-compiler gcc makeWrapper pkgconfig ]
-    ++ stdenv.lib.optionals gtkSupport [
-      alsaLib atk cairo fontconfig freetype gdk_pixbuf glib gtk pango
-    ]
-  ;
+  # Passthru some variables so other derivations can refer to them.
+  #
+  # ${faust.version}.
+  #
+  # ${faust}/${faust.appls} is a dir in which the unwrapped faust2appl
+  # scripts are placed.
+  passthru = {
+    inherit appls version;
+  };
 
-  makeFlags="PREFIX=$(out)";
-  FPATH="$out"; # <- where to search
+  preConfigure = ''
+    makeFlags="$makeFlags prefix=$out"
 
-  phases = [ "unpackPhase installPhase postInstall" ];
+    # The faust makefiles use 'system ?= $(shell uname -s)' but nix
+    # defines 'system' env var, so undefine that so faust detects the
+    # correct system.
+    unset system
+  '';
 
-  installPhase  = ''
-    mkdir $out/bin
-    install tools/faust2appls/faust2alsaconsole $out/bin
-    install tools/faust2appls/faustpath  $out/bin
-    install tools/faust2appls/faustoptflags  $out/bin
-    install tools/faust2appls/faust2alsa $out/bin
-
-    patchShebangs $out/bin
-
-    wrapProgram $out/bin/faust2alsaconsole \
-    --prefix PKG_CONFIG_PATH : ${alsaLib}/lib/pkgconfig \
-    --set FAUSTLIB ${faust-compiler}/lib/faust \
-    --set FAUSTINC ${faust-compiler}/include/
-
-    GTK_PKGCONFIG_PATHS=${gtk}/lib/pkgconfig:${pango}/lib/pkgconfig:${glib}/lib/pkgconfig:${cairo}/lib/pkgconfig:${gdk_pixbuf}/lib/pkgconfig:${atk}/lib/pkgconfig:${freetype}/lib/pkgconfig:${fontconfig}/lib/pkgconfig
-
-    wrapProgram  $out/bin/faust2alsa \
-    --prefix PKG_CONFIG_PATH :  ${alsaLib}/lib/pkgconfig:$GTK_PKGCONFIG_PATHS \
-    --set FAUSTLIB ${faust-compiler}/lib/faust \
-    --set FAUSTINC ${faust-compiler}/include/ \
-    ''
-    + stdenv.lib.optionalString (!gtkSupport) "rm $out/bin/faust2alsa"
-  ;
-
+  # Move all faust2* scripts into 'lib/faust/faust2appls' since they
+  # won't run properly without additional paths setup.
+  #
+  # TODO: They are included in this package, but it might be better to
+  # exclude them here and include them only in each specific
+  # faust2alsa, etc.
   postInstall = ''
-    sed -e "s@\$FAUST_INSTALL /usr/local /usr /opt /opt/local@${faust-compiler}@g" -i $out/bin/faustpath
-    sed -i "s@/bin/bash@${bash}/bin/bash@g" $out/bin/faustoptflags
-    find $out/bin/ -name "*faust2*" -type f | xargs sed "s@pkg-config@${pkgconfig}/bin/pkg-config@g" -i
-    find $out/bin/ -name "*faust2*" -type f | xargs sed "s@CXX=g++@CXX=${gcc}/bin/g++@g" -i
-    find $out/bin/ -name "*faust2*" -type f | xargs sed "s@faust -i -a @${faust-compiler}/bin/faust -i -a ${faust-compiler}/lib/faust/@g" -i
+    mkdir "$out/${appls}"
+    mv "$out"/bin/faust2* "$out/${appls}"
+  '';
+
+  postFixup = ''
+    # For each faust2appl script, change so 'faustpath' and
+    # 'faustoptflags' will be found by absolute paths.
+    #
+    # TODO: I noticed only some faust2appl scripts use these. The others
+    # may need different modifications.
+    for prog in "$out/${appls}"/*; do
+      substituteInPlace "$prog" \
+        --replace ". faustpath" ". '$out/bin/faustpath'" \
+        --replace ". faustoptflags" ". '$out/bin/faustoptflags'"
+    done
+
+    # Set faustpath explicitly.
+    substituteInPlace "$out"/bin/faustpath \
+      --replace "/usr/local /usr /opt /opt/local" "$out"
+
+    # Normally, I'd use makeWrapper to prefix the PATH variable with
+    # ${coreutils}/bin, however 'faustoptflags' is 'source'd into
+    # other faust scripts and not used as an executable, so patch
+    # 'uname' usage directly.
+    substituteInPlace "$out"/bin/faustoptflags \
+      --replace uname "${coreutils}/bin/uname"
   '';
 
   meta = with stdenv.lib; {
@@ -69,6 +87,8 @@ stdenv.mkDerivation rec {
       audio platforms and plugin formats (jack, alsa, ladspa, maxmsp,
       puredata, csound, supercollider, pure, vst, coreaudio) without
       any change to the FAUST code.
+      This package has just the compiler. Install faust for the full
+      set of faust2somethingElse tools.
     '';
     homepage = http://faust.grame.fr/;
     downloadPage = http://sourceforge.net/projects/faudiostream/files/;
@@ -76,5 +96,5 @@ stdenv.mkDerivation rec {
     platforms = platforms.linux;
     maintainers = [ maintainers.magnetophon ];
   };
-}
 
+}
