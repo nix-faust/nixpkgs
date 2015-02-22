@@ -13179,6 +13179,14 @@ let
 
   fakenes = callPackage ../misc/emulators/fakenes { };
 
+  faust = callPackage ../applications/audio/faust { };
+
+  faust2alsa = callPackage ../applications/audio/faust/faust2alsa.nix { };
+
+  faust2jack = callPackage ../applications/audio/faust/faust2jack.nix { };
+
+  faust2lv2 = callPackage ../applications/audio/faust/faust2lv2.nix { };
+
   fceux = callPackage ../misc/emulators/fceux { };
 
   foldingathome = callPackage ../misc/foldingathome { };
