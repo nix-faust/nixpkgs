@@ -29,6 +29,8 @@ let
 
     inherit src;
 
+    buildInputs = [ makeWrapper ];
+
     passthru = {
       inherit mkFaust2Appl;
     };
@@ -42,10 +44,12 @@ let
       unset system
     '';
 
-    # Remove all faust2appl scripts since they won't run properly
+    # Remove some faust2appl scripts since they won't run properly
     # without additional paths setup. See mkFaust2Appl.
     postInstall = ''
-      rm "$out"/bin/faust2*
+      # syntax error when eval'd directly
+      pattern="faust2!(svg)"
+      (shopt -s extglob; rm "$out"/bin/$pattern)
     '';
 
     postFixup = ''
@@ -59,6 +63,12 @@ let
       # 'uname' usage directly.
       substituteInPlace "$out"/bin/faustoptflags \
         --replace uname "${coreutils}/bin/uname"
+
+      # wrapper for scripts that don't need mkFaust2Appl
+      for script in "$out"/bin/faust2*; do
+        wrapProgram "$script" \
+          --prefix PATH : "$out"/bin
+      done
     '';
 
     meta = meta // {
