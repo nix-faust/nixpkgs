@@ -5,6 +5,8 @@
 , pkgconfig
 }:
 
+with stdenv.lib.strings;
+
 let
 
   version = "8-1-2015";
@@ -32,7 +34,7 @@ let
     buildInputs = [ makeWrapper ];
 
     passthru = {
-      inherit mkFaust2Appl;
+      inherit wrap wrapWithBuildEnv;
     };
 
     preConfigure = ''
@@ -93,12 +95,54 @@ let
 
   };
 
-  # Builder for 'faust2appl' scripts, such as faust2alsa. These
-  # scripts run faust to generate cpp code, then invoke the c++
-  # compiler to build the code. This builder wraps these scripts in
-  # parts of the stdenv such that when the scripts are called outside
-  # any nix build, they behave as if they were running inside a nix
-  # build in terms of compilers and paths being configured.
+  # Default values for faust2appl.
+  faust2ApplBase =
+    { appl
+    , dir ? "tools/faust2appls"
+    , prog ? "${dir}/${appl}"
+    , ...
+    }:
+
+    {
+      name = "${appl}-${version}";
+
+      inherit src;
+
+      configurePhase = ":";
+
+      buildPhase = ":";
+
+      installPhase = ''
+        runHook preInstall
+
+        mkdir -p "$out/bin"
+        cp "${prog}" "$out/bin/${appl}"
+
+        runHook postInstall
+      '';
+
+      postInstall = ''
+        # For the faust2appl script, change 'faustpath' and
+        # 'faustoptflags' to absolute paths.
+        #
+        # TODO: I noticed only some faust2appl scripts use these. The others
+        # may need different modifications.
+        substituteInPlace "$out/bin/${appl}" \
+          --replace ". faustpath" ". '${faust}/bin/faustpath'" \
+          --replace ". faustoptflags" ". '${faust}/bin/faustoptflags'"
+      '';
+
+      meta = meta // {
+        description = "The ${appl} script, part of faust functional programming language for realtime audio signal processing";
+      };
+    };
+
+  # Builder for 'faust2appl' scripts, such as faust2alsa, that run
+  # faust to generate cpp code, then invoke the c++ compiler to build
+  # the code. This builder wraps these scripts in parts of the stdenv
+  # such that when the scripts are called outside any nix build, they
+  # behave as if they were running inside a nix build in terms of
+  # compilers and paths being configured.
   #
   # The function takes two main args: the appl name (e.g.
   # 'faust2alsa') and an optional list of propagatedBuildInputs. It
@@ -108,42 +152,19 @@ let
   #
   # The build input 'faust' is automatically added to the
   # propagatedBuildInputs.
-  mkFaust2Appl =
+  wrapWithBuildEnv =
     { appl
     , propagatedBuildInputs ? [ ]
-    , dir ? "tools/faust2appls"
-    , prog ? "${dir}/${appl}"
-    }:
+    , ...
+    }@args:
 
-    stdenv.mkDerivation {
-
-      name = "${appl}-${version}";
-
-      inherit src;
+    stdenv.mkDerivation ((faust2ApplBase args) // {
 
       buildInputs = [ makeWrapper pkgconfig ];
 
       propagatedBuildInputs = [ faust ] ++ propagatedBuildInputs;
 
-      configurePhase = ":";
-
-      buildPhase = ":";
-
-      installPhase = ''
-        mkdir -p "$out/bin"
-        cp "${prog}" "$out/bin/${appl}"
-      '';
-
       postFixup = ''
-        # For the faust2appl script, change 'faustpath' and
-        # 'faustoptflags' to absolute paths.
-        #
-        # TODO: I noticed only some faust2appl scripts use these. The others
-        # may need different modifications.
-        substituteInPlace "$out/bin/${appl}" \
-          --replace ". faustpath" ". '${faust}/bin/faustpath'" \
-          --replace ". faustoptflags" ". '${faust}/bin/faustoptflags'"
-
         # This exports parts of the stdenv, including gcc-wrapper, so that
         # faust2${appl} will build things correctly. For example, rpath is
         # set so that compiled binaries link to the libs inside the nix
@@ -155,11 +176,30 @@ let
           --set NIX_CFLAGS_COMPILE "\"$NIX_CFLAGS_COMPILE\"" \
           --set NIX_LDFLAGS "\"$NIX_LDFLAGS\""
       '';
+    });
 
-      meta = meta // {
-        description = "The ${appl} script, part of faust functional programming language for realtime audio signal processing";
-      };
+  # Builder for 'faust2appl' scripts, such as faust2firefox that
+  # simply need to be wrapped with some dependencies on PATH.
+  #
+  # The build input 'faust' is automatically added to the PATH.
+  wrap =
+    { appl
+    , runtimeInputs ? [ ]
+    , ...
+    }@args:
 
-    };
+    let
+
+      runtimePath = concatStringsSep ":" (map (p: "${p}/bin") ([ faust ] ++ runtimeInputs));
+
+    in stdenv.mkDerivation ((faust2ApplBase args) // {
+
+      buildInputs = [ makeWrapper ];
+
+      postFixup = ''
+        wrapProgram "$out/bin/${appl}" --prefix PATH : "${runtimePath}"
+      '';
+
+    });
 
 in faust

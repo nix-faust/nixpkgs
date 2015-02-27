@@ -2,7 +2,7 @@
 , lv2
 }:
 
-faust.mkFaust2Appl {
+faust.wrapWithBuildEnv {
 
   appl = "faust2lv2";
 

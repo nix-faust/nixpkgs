@@ -10,7 +10,7 @@
 , pango
 }:
 
-faust.mkFaust2Appl {
+faust.wrapWithBuildEnv {
 
   appl = "faust2alsa";
 
