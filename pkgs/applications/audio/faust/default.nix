@@ -97,14 +97,14 @@ let
 
   # Default values for faust2appl.
   faust2ApplBase =
-    { appl
+    { baseName
     , dir ? "tools/faust2appls"
-    , prog ? "${dir}/${appl}"
+    , scripts ? [ baseName ]
     , ...
     }:
 
     {
-      name = "${appl}-${version}";
+      name = "${baseName}-${version}";
 
       inherit src;
 
@@ -116,7 +116,9 @@ let
         runHook preInstall
 
         mkdir -p "$out/bin"
-        cp "${prog}" "$out/bin/${appl}"
+        for script in ${concatStringsSep " " scripts}; do
+          cp "${dir}/$script" "$out/bin/"
+        done
 
         runHook postInstall
       '';
@@ -127,13 +129,15 @@ let
         #
         # TODO: I noticed only some faust2appl scripts use these. The others
         # may need different modifications.
-        substituteInPlace "$out/bin/${appl}" \
-          --replace ". faustpath" ". '${faust}/bin/faustpath'" \
-          --replace ". faustoptflags" ". '${faust}/bin/faustoptflags'"
+        for script in "$out"/bin/*; do
+          substituteInPlace "$script" \
+            --replace ". faustpath" ". '${faust}/bin/faustpath'" \
+            --replace ". faustoptflags" ". '${faust}/bin/faustoptflags'"
+        done
       '';
 
       meta = meta // {
-        description = "The ${appl} script, part of faust functional programming language for realtime audio signal processing";
+        description = "The ${baseName} script, part of faust functional programming language for realtime audio signal processing";
       };
     };
 
@@ -153,7 +157,7 @@ let
   # The build input 'faust' is automatically added to the
   # propagatedBuildInputs.
   wrapWithBuildEnv =
-    { appl
+    { baseName
     , propagatedBuildInputs ? [ ]
     , ...
     }@args:
@@ -165,16 +169,19 @@ let
       propagatedBuildInputs = [ faust ] ++ propagatedBuildInputs;
 
       postFixup = ''
-        # This exports parts of the stdenv, including gcc-wrapper, so that
-        # faust2${appl} will build things correctly. For example, rpath is
-        # set so that compiled binaries link to the libs inside the nix
-        # store (run 'ldd' on the compilation result)
-        wrapProgram "$out/bin/${appl}" \
-          --set FAUST_LIB_PATH "${faust}/lib/faust" \
-          --prefix PATH : "$PATH" \
-          --prefix PKG_CONFIG_PATH : "$PKG_CONFIG_PATH" \
-          --set NIX_CFLAGS_COMPILE "\"$NIX_CFLAGS_COMPILE\"" \
-          --set NIX_LDFLAGS "\"$NIX_LDFLAGS\""
+        # This exports parts of the stdenv, including gcc-wrapper, so
+        # that the faust2appl scripts will build things correctly. For
+        # example, rpath is set so that compiled binaries link to the
+        # libs inside the nix store (run 'ldd' on the compilation
+        # result)
+        for script in "$out"/bin/*; do
+          wrapProgram "$script" \
+            --set FAUST_LIB_PATH "${faust}/lib/faust" \
+            --prefix PATH : "$PATH" \
+            --prefix PKG_CONFIG_PATH : "$PKG_CONFIG_PATH" \
+            --set NIX_CFLAGS_COMPILE "\"$NIX_CFLAGS_COMPILE\"" \
+            --set NIX_LDFLAGS "\"$NIX_LDFLAGS\""
+        done
       '';
     });
 
@@ -183,7 +190,7 @@ let
   #
   # The build input 'faust' is automatically added to the PATH.
   wrap =
-    { appl
+    { baseName
     , runtimeInputs ? [ ]
     , ...
     }@args:
@@ -197,7 +204,9 @@ let
       buildInputs = [ makeWrapper ];
 
       postFixup = ''
-        wrapProgram "$out/bin/${appl}" --prefix PATH : "${runtimePath}"
+        for script in "$out"/bin/*; do
+          wrapProgram "$script" --prefix PATH : "${runtimePath}"
+        done
       '';
 
     });

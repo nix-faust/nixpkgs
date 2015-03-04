@@ -12,7 +12,7 @@
 
 faust.wrapWithBuildEnv {
 
-  appl = "faust2alsa";
+  baseName = "faust2alsa";
 
   propagatedBuildInputs = [
     alsaLib

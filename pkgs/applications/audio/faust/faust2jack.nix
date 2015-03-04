@@ -6,7 +6,13 @@
 
 faust.wrapWithBuildEnv {
 
-  appl = "faust2jack";
+  baseName = "faust2jack";
+
+  scripts = [
+    "faust2jack"
+    "faust2jackinternal"
+    "faust2jackconsole"
+  ];
 
   propagatedBuildInputs = [
     gtk

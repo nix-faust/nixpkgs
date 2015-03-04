@@ -4,7 +4,7 @@
 
 faust.wrapWithBuildEnv {
 
-  appl = "faust2lv2";
+  baseName = "faust2lv2";
 
   propagatedBuildInputs = [ lv2 ];
 
