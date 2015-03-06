@@ -101,9 +101,9 @@ let
     , dir ? "tools/faust2appls"
     , scripts ? [ baseName ]
     , ...
-    }:
+    }@args:
 
-    {
+    args // {
       name = "${baseName}-${version}";
 
       inherit src;

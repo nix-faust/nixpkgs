@@ -13185,6 +13185,8 @@ let
 
   faust2alsa = callPackage ../applications/audio/faust/faust2alsa.nix { };
 
+  faust2csound = callPackage ../applications/audio/faust/faust2csound.nix { };
+
   faust2firefox = callPackage ../applications/audio/faust/faust2firefox.nix { };
 
   faust2jack = callPackage ../applications/audio/faust/faust2jack.nix { };
